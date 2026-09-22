@@ -48,8 +48,15 @@ so treat fp16 as a memory option, not an equal.
 MusicUnderstanding, not beat_this. Same fitting maths. On the demo it reports
 half the tempo beat_this does (77.5 vs 154.9 BPM). On the user's loops its
 misses are 2/3 (triplet basslines) and 1/2. Documented, not "fixed" — the fix
-is `fixedTempo:` / `--bpm name` (0.2.0): a fixed grid is never shifted and
+is `fixedTempo:` / `--bpm name` (0.2.0): a fixed grid is never bar-shifted and
 its synthetic beats still let quantize find the subdivision.
+
+## Timing
+The model's onsets DRIFT within a chunk: on the 123 BPM piano loop, 35 ms
+early at 0.2 s converging to ~10 ms late by 3 s (frac-of-sixteenth 0.72 →
+0.98 → 0.05). A constant lag correction (upstream's, ours) measures ~0 and
+does nothing. `--quantize` on a fixed grid fixed all 43 onsets. Do not chase
+"alignment" with an offset again.
 
 ## Fixtures
 `Tools/dump_fixtures.py` regenerates `Tests/.../Fixtures` from a muscriptor

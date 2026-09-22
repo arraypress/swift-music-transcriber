@@ -39,8 +39,22 @@ public enum MIDIAssembly {
             grid = grid.withOnsetDelay(onsets: input.map(\.onset))
         }
         let delay = grid.onsetDelay ?? 0
-        let offset = grid.barOffset(minimumShift: delay)
+        // A tracked grid shifts the music forward so bar 1 lands on a downbeat and
+        // the lag correction cannot push ticks negative. A fixed grid's downbeat
+        // is zero by definition, so nothing shifts; a note the correction pulls
+        // before the start is clamped to it.
+        let offset = grid.isFixed ? 0 : grid.barOffset(minimumShift: delay)
         var notes = BeatGridMath.shifted(input, by: -delay)
+        if grid.isFixed {
+            notes = notes.map { note in
+                var n = note
+                if n.onset < 0 {
+                    n.onset = 0
+                    n.offset = max(n.offset, TranscribedNote.minimumDuration)
+                }
+                return n
+            }
+        }
         if quantize, let subdivision = grid.beatSubdivision {
             notes = BeatGridMath.quantized(notes, step: 60 / grid.bpm / Double(subdivision), offset: offset)
         }

@@ -110,6 +110,11 @@ Three things the table says plainly:
   nothing to hold on to. Of the 23 wrong tempos, 8 were exactly 2/3 (a triplet bassline tracked
   on its subdivision) and 5 were half. Loops carry their tempo in the name, so `fixedTempo:`
   with `FilenameTempo` sidesteps the tracker entirely — and makes `quantize` exact.
+- **The model's timing is not a constant offset.** On a 123 BPM piano loop its onsets run up to
+  35 ms early for the first three seconds of a chunk and settle about 10 ms late after that.
+  Upstream's lag correction, which fits one shift, measures the two halves as cancelling and
+  applies nothing; nothing else could either. `quantize` against the loop's own grid put every
+  one of its 43 onsets exactly on a sixteenth. For loops, quantize.
 
 ## The model is not bundled
 
