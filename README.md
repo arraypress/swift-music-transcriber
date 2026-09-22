@@ -73,6 +73,38 @@ reports **77.5 BPM where beat_this reports 154.9**: the same grid an octave apar
 defensible for that material; it is the one place the output can differ from upstream's
 by design, and `TempoDetection.off` sidesteps it.
 
+## Measured on 175 loops
+
+A sample of the user's loops from a commercial pack (7.6 s, 44.1 kHz, BPM and root in the
+filename), medium fp32, defaults, one `scribe` run per folder. Tempo is MusicUnderstanding's;
+key root is the fleet's `midi key` run over the transcription against the filename.
+
+| folder | files | notes / file | tempo within 1 BPM | no grid | key root | what the model called it |
+|---|---|---|---|---|---|---|
+| bass loops | 40 | 32 | 31 | 0 | 26 / 38 | electric_bass 32, piano 4, guitar 5 |
+| full drum loops | 8 | 21 | 8 | 0 | — | drums 7 |
+| stripped drum loops | 8 | 23 | 8 | 0 | — | drums 6 |
+| hat loops | 8 | 18 | 5 | 3 | — | drums 6 |
+| bongo / shaker loops | 16 | 1–4 | 4 | 12 | — | mostly nothing |
+| synth loops | 20 | 37 | 16 | 1 | 8 / 16 | acoustic_guitar 7, distorted guitar 4, piano 3 |
+| filtered disco loops | 20 | 90 | 13 | 3 | — | drums 9, electric_bass 8, guitar 7 |
+| fx loops | 15 | 62 | 10 | 2 | 4 / 9 | distorted guitar 8, drums 6 |
+| vocal loops | 40 | 18 | 16 | 20 | — | guitar 4, voice 3, drums 3 |
+| **all** | **175** | | **111** | **41** | **38 / 63** | **4.5× realtime**, load and beat tracking included |
+
+Three things the table says plainly:
+
+- **Synths are not a class the model reaches for.** Twenty synth loops, zero `synth_lead` or
+  `synth_pad` labels; they come back as guitars and pianos. With
+  `--instruments synth_lead,synth_pad,electric_bass,drums` the same loops produce **48 notes
+  per file instead of 37**, labelled by construction. On electronic material, mask.
+- **Untuned percussion barely registers.** Bongo and shaker loops yield one to four notes; kit
+  loops yield twenty and are labelled drums. Vocals are transcribed as pitch (18 notes per loop)
+  but rarely labelled `voice` (3 of 40).
+- **Tempo holds where there is a beat.** Within 1 BPM on every kit loop and 31 of 40 bass loops;
+  the 41 loops with no grid are mostly shakers, bongos and half the vocals, where a tracker has
+  nothing to hold on to. Five loops came back an octave off.
+
 ## The model is not bundled
 
 The weights are **CC BY-NC 4.0** (non-commercial) and gated on Hugging Face; the code is MIT.
