@@ -14,6 +14,10 @@ result.notes.count                       // 173
 result.instruments                       // ["distorted_electric_guitar", "electric_bass", "drums"]
 result.beatGrid?.bpm                     // 77.5, or nil when no steady beat was found
 
+// A loop whose name carries its tempo: skip the tracker, write 123 BPM in 4/4, never shift it.
+let bpm = FilenameTempo.bpm(inFilename: url.lastPathComponent)          // 123 for "VENDOR_PK2_123_bass_loop_C.wav"
+let loop = try await transcriber.transcribe(url, fixedTempo: bpm)
+
 let midi = try MIDIAssembly.data(notes: result.notes, grid: result.beatGrid)
 try midi.write(to: url.deletingPathExtension().appendingPathExtension("mid"))
 ```
@@ -103,7 +107,9 @@ Three things the table says plainly:
   but rarely labelled `voice` (3 of 40).
 - **Tempo holds where there is a beat.** Within 1 BPM on every kit loop and 31 of 40 bass loops;
   the 41 loops with no grid are mostly shakers, bongos and half the vocals, where a tracker has
-  nothing to hold on to. Five loops came back an octave off.
+  nothing to hold on to. Of the 23 wrong tempos, 8 were exactly 2/3 (a triplet bassline tracked
+  on its subdivision) and 5 were half. Loops carry their tempo in the name, so `fixedTempo:`
+  with `FilenameTempo` sidesteps the tracker entirely — and makes `quantize` exact.
 
 ## The model is not bundled
 

@@ -46,9 +46,11 @@ public final class MusicTranscriber: @unchecked Sendable {
     ///   - url: any audio file AVFoundation decodes.
     ///   - options: how to decode; see ``TranscriptionOptions``.
     ///   - tempo: whether to detect a beat grid for the MIDI; see ``TempoDetection``.
+    ///   - fixedTempo: a known BPM — a loop's, from its name — which skips the
+    ///     tracker and writes that tempo in 4/4 with the downbeat at zero.
     ///   - progress: called with the fraction of chunks done, on the caller's task.
     public func transcribe(_ url: URL, options: TranscriptionOptions = .init(),
-                           tempo: TempoDetection = .bestEffort,
+                           tempo: TempoDetection = .bestEffort, fixedTempo: Double? = nil,
                            progress: ((Double) -> Void)? = nil) async throws -> Transcription {
         try options.validate()
         let samples = try AudioLoader.load(url)
@@ -56,7 +58,10 @@ public final class MusicTranscriber: @unchecked Sendable {
         var warnings: [String] = []
 
         var grid: BeatGrid?
-        if tempo != .off {
+        if let fixedTempo {
+            guard fixedTempo > 0 else { throw MusicTranscriberError.invalidOptions("a fixed tempo must be positive") }
+            grid = .fixed(bpm: fixedTempo, duration: audioDuration)
+        } else if tempo != .off {
             do {
                 grid = try await Self.detectGrid(url: url, duration: audioDuration)
             } catch let error as MusicTranscriberError {

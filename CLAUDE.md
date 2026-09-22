@@ -46,7 +46,10 @@ so treat fp16 as a memory option, not an equal.
 
 ## Beat tracker
 MusicUnderstanding, not beat_this. Same fitting maths. On the demo it reports
-half the tempo beat_this does (77.5 vs 154.9 BPM). Documented, not "fixed".
+half the tempo beat_this does (77.5 vs 154.9 BPM). On the user's loops its
+misses are 2/3 (triplet basslines) and 1/2. Documented, not "fixed" — the fix
+is `fixedTempo:` / `--bpm name` (0.2.0): a fixed grid is never shifted and
+its synthetic beats still let quantize find the subdivision.
 
 ## Fixtures
 `Tools/dump_fixtures.py` regenerates `Tests/.../Fixtures` from a muscriptor

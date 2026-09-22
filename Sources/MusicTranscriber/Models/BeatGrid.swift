@@ -39,14 +39,34 @@ public struct BeatGrid: Codable, Sendable, Equatable {
     /// tightly enough on any; what ``quantize`` snaps to.
     public private(set) var beatSubdivision: Int?
 
+    /// Whether the tempo was given rather than tracked. A given grid is never
+    /// shifted: its downbeat is the start of the file and the notes stay where
+    /// the recording put them.
+    public let isFixed: Bool
+
     public init(bpm: Double, beatsPerBar: Int?, firstDownbeat: Double, beats: [Double]? = nil,
-                onsetDelay: Double? = nil, beatSubdivision: Int? = nil) {
+                onsetDelay: Double? = nil, beatSubdivision: Int? = nil, isFixed: Bool = false) {
         self.bpm = bpm
         self.beatsPerBar = beatsPerBar
         self.firstDownbeat = firstDownbeat
         self.beats = beats
         self.onsetDelay = onsetDelay
         self.beatSubdivision = beatSubdivision
+        self.isFixed = isFixed
+    }
+
+    /// A grid at a known tempo — a loop's, from its filename — with the first
+    /// downbeat at zero and a beat every `60 / bpm` seconds across `duration`.
+    ///
+    /// The synthetic beats let ``withOnsetDelay(onsets:)`` find the subdivision
+    /// the notes sit on, so `quantize` works; the measured lag itself is not
+    /// applied, because a loop is already on its grid and a shift would only
+    /// move it off, or push it a whole bar later to keep ticks positive.
+    public static func fixed(bpm: Double, beatsPerBar: Int? = 4, duration: Double) -> BeatGrid {
+        let beat = 60 / bpm
+        let count = max(2, Int((duration / beat).rounded(.up)) + 1)
+        return BeatGrid(bpm: bpm, beatsPerBar: beatsPerBar, firstDownbeat: 0,
+                        beats: (0..<count).map { Double($0) * beat }, isFixed: true)
     }
 
     /// What is written when nothing was detected: 120 BPM, no meter.
@@ -83,7 +103,7 @@ public struct BeatGrid: Codable, Sendable, Equatable {
     public func withOnsetDelay(onsets: [Double]) -> BeatGrid {
         var grid = self
         if let beats, let measured = BeatGridMath.estimateOnsetDelay(onsets: onsets, beats: beats, bpm: bpm) {
-            grid.onsetDelay = measured.seconds
+            grid.onsetDelay = isFixed ? 0 : measured.seconds
             grid.beatSubdivision = measured.subdivision
         } else {
             grid.onsetDelay = 0
