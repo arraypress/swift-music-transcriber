@@ -1,0 +1,24 @@
+{
+  "originHash" : "f763be67d7d281c1b95dd7bcb93e56dbccdf3847fd9dd8b6c6f621457ab47a11",
+  "pins" : [
+    {
+      "identity" : "swift-midi-file",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/arraypress/swift-midi-file.git",
+      "state" : {
+        "revision" : "71f1a19adc117987310c7463fe650d8b6c776dfa",
+        "version" : "0.3.0"
+      }
+    },
+    {
+      "identity" : "swift-music-analysis",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/arraypress/swift-music-analysis.git",
+      "state" : {
+        "revision" : "935f487986f10577abcf584132e9f010e647a5d2",
+        "version" : "0.3.0"
+      }
+    }
+  ],
+  "version" : 3
+}
