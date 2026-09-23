@@ -7,7 +7,7 @@ re-derivation would get wrong.
 
 ## Build & test
 ```bash
-swift build && swift test                     # 26 tests, golden fixtures, no model
+swift build && swift test                     # 41 tests, golden fixtures, no model (2 parity tests skip without env)
 SCRIBE_MODEL=~/Library/Application\ Support/scribe/models swift test   # + end-to-end parity
 ```
 The end-to-end test needs a **medium fp32** asset and reproduces upstream's decode
@@ -44,12 +44,28 @@ an M3 Max. fp16 diverges only where output is already degenerate (small on dense
 material) — but on `large` it also moved the note count on the mp3 (161 vs 190),
 so treat fp16 as a memory option, not an equal.
 
-## Beat tracker
-MusicUnderstanding, not beat_this. Same fitting maths. On the demo it reports
-half the tempo beat_this does (77.5 vs 154.9 BPM). On the user's loops its
-misses are 2/3 (triplet basslines) and 1/2. Documented, not "fixed" — the fix
-is `fixedTempo:` / `--bpm name` (0.2.0): a fixed grid is never bar-shifted and
-its synthetic beats still let quantize find the subdivision.
+## Beat tracker (0.4.0: Beat This! ported, upstream's)
+`Tools/export_beat_this.py` → `scribe-beat-this-float32.aimodel` (80 MB).
+`BeatTracker.automatic` uses it when installed, else MusicUnderstanding.
+- The ORIGINAL module torch.exports and converts, but Core AI's compiler
+  refuses it at load: `mps.strided_slice` infers `?x1x32x0` on the einops
+  `b n h -> b h n 1` gate reshape with a dynamic time axis. Fix: one method
+  re-authored (`Attention.forward`, plain reshape/permute, RoPE as a constant
+  32×32 matrix, interleaved pairs like rotary_embedding_torch). Max |diff| 0.
+- Front end: 22.05 kHz, n_fft 1024, hop 441, magnitude/√1024
+  (torchaudio `normalized="frame_length"`), 128 Slaney mels 30–11000 Hz, no
+  norm, log1p(1000·x). MuScriptor feeds it the 16 kHz signal; upstream
+  resamples with soxr, we use the julius port — the one non-shared step.
+  Beats still land within one frame on every test clip.
+- Chunking is upstream's split_piece/aggregate (1500 frames, 6-frame borders,
+  keep_first, last chunk shifted to the end). TEST TRAP: the fixture chunk is
+  already padded; compare a single `run(chunk:)`, not `logits(mel:)`, or the
+  double padding costs 10 dB.
+- MEASURED on the 175 loops: Beat This! within 1 BPM 48/175, no grid 118/175;
+  Apple 111 and 41. On the 2-min track Beat This! 178 (right), Apple 89.
+  Short loops wobble past the 5% residual rule for Beat This!. `automatic`
+  still prefers Beat This! (parity with upstream); loops want `--bpm name`.
+- The tracker is cached per MusicTranscriber; loading per file cost ~1 s a loop.
 
 ## Tempo octave
 `tempoRange:` / `--bpm-range lo-hi`: fleet multipliers (from swift-music-analysis)
@@ -64,7 +80,27 @@ early at 0.2 s converging to ~10 ms late by 3 s (frac-of-sixteenth 0.72 →
 does nothing. `--quantize` on a fixed grid fixed all 43 onsets. Do not chase
 "alignment" with an offset again.
 
-## Fixtures
+## The STFT window is the checkpoint's, not a formula
+Every checkpoint stores `...mel_spec_transform.spectrogram.window`: a periodic
+Hann window rounded to half precision (two samples even sit one fp16 ulp off a
+straight rounding). A float32 Hann window is 2.4e-4 away per sample, which
+lifts the near-empty mel bins above 7 kHz by whole log units: the mel dropped
+to 36 dB against upstream on real clips (99 dB with the stored window) and 8
+of 19 parity runs flipped one near-tie token (margins 0.01–0.09 logits). The
+window is tabulated in `Support/MelWindow.swift` and `FrontEndTests` checks it
+bit for bit against `Fixtures/mel_window.f32`. The stored filterbank is a
+float32 torchaudio bank (≤3.1e-4 from ours in double), below the STFT noise
+floor; it is not embedded. Synthetic fixtures (sine + noise) never showed
+this — only lowpassed real audio does.
+
+## Fixtures and parity
 `Tools/dump_fixtures.py` regenerates `Tests/.../Fixtures` from a muscriptor
-checkout; `Tools/reference_tokens.py` records upstream's per-chunk tokens for a
-clip. Both need the checkout beside this repo and, for tokens, the HF login.
+checkout (mel pair through the checkpoint's own window and bank);
+`Tools/reference_tokens.py --write-wav` records upstream's per-chunk tokens
+and the exact 16 kHz samples for a clip; `Tools/dump_logits.py` records
+upstream's teacher-forced logits for one chunk. All need the checkout beside
+this repo (or `MUSCRIPTOR_DIR`) and, for the model, the HF login. Then:
+```bash
+SCRIBE_PARITY_DIR=<dir of clips> SCRIBE_MODEL=... swift test --filter ParityTests   # PASS/DIFF per clip×size, note F1
+SCRIBE_LOGIT_CASES="medium:<dir>/<clip>:0;…" SCRIBE_MODEL=... swift test --filter LogitParityTests   # per-step PSNR, flips, margins
+```

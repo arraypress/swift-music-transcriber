@@ -53,13 +53,20 @@ Every stage was held to the Python code, not to a description of it:
 
 | stage | test | result |
 |---|---|---|
-| log-mel front end (vDSP) | fixture from `torchaudio` | > 90 dB PSNR |
+| log-mel front end (vDSP) | upstream's mel through the checkpoint's own window and filterbank | 99 dB PSNR on real clips |
 | sinc resampler (julius port) | fixtures at 44.1 and 48 kHz | > 90 dB PSNR |
+| decoder logits, teacher-forced | upstream's CPU fp32 logits at every step of 4 chunks | ≥ 116 dB with upstream's mel, ≥ 94 dB with ours; no argmax flips |
 | token decoder, tie prologue, note cleanup | upstream's event stream for 3 real chunks | identical, 346 events |
 | MIDI layout | upstream's file for the same notes | same notes, ticks, tracks, tempo |
-| **whole pipeline**, medium fp32, on the repo's demo clip | upstream's greedy CPU decode | **token for token, all 3 chunks** |
-| large, fp32 and fp16 | same | token for token |
+| **whole pipeline**, all three sizes, fp32 | upstream's greedy CPU decode on 7 clips (bass, piano, drums, disco, a 2-minute makina track) | **token for token in all 19 runs, 25,000+ tokens** |
+| large fp16 | same, demo clip | token for token |
 | small fp16 | same | diverges after ~50 tokens — where upstream's own fp16 run diverges |
+
+One thing had to be taken from the checkpoint rather than recomputed: the STFT window. Every
+checkpoint stores a periodic Hann window rounded to half precision, and a float32 Hann window
+lifts the near-empty mel bins above 7 kHz by whole log units. Before the stored window was used,
+8 of the 19 runs flipped a single near-tie token (top-two margin 0.01–0.09 logits). The window is
+tabulated in `MelWindow.swift` and checked bit for bit against the checkpoint.
 
 So fp32 is the default. On this hardware it was no slower than fp16 for `medium`; for `large`,
 which is bandwidth-bound at 5.5 GB, fp16 is twice as fast and still exact on the demo.
@@ -77,13 +84,21 @@ detection is snapped in by the smallest musical ratio; when two ratios land (89 
 sit on the beats. That is a measurement on the model's own output, not a guess: 178 and 155
 on those two, and a 123 BPM bassline heard at 82 comes back as 123.
 
-**The beat tracker is not upstream's.** Tempo and metre come from Apple's MusicUnderstanding
-(via [swift-music-analysis](https://github.com/arraypress/swift-music-analysis)); upstream uses
-`beat_this`. The fitting rules on top — least-squares tempo, 90% downbeat agreement for a metre,
-circular-statistics onset delay — are ported verbatim. On the demo clip MusicUnderstanding
-reports **77.5 BPM where beat_this reports 154.9**: the same grid an octave apart. Both are
-defensible for that material; it is the one place the output can differ from upstream's
-by design, and `TempoDetection.off` sidesteps it.
+**The beat tracker is upstream's too, when installed.** MuScriptor finds tempo and metre with
+[Beat This!](https://github.com/CPJKU/beat_this) (CPJKU, MIT), and `Tools/export_beat_this.py`
+puts that model's `final0` checkpoint on Core AI as well: 20M parameters, 80 MB, a few seconds
+per song. Its spectrogram front end, chunking and peak-picking are ported and held to fixtures
+from the Python code, and on the demo, the Makina track and two loops it returns upstream's
+beats to the frame — including a loop where upstream's fit fails and falls back to 120 BPM, which
+this does too, because matching upstream includes matching its misses. Without the asset, Apple's
+MusicUnderstanding (via [swift-music-analysis](https://github.com/arraypress/swift-music-analysis))
+stands in; on the demo it hears the half-time pulse, 77.5 where Beat This! says 154.9.
+`BeatTracker` picks: `.automatic` (Beat This! when installed), `.beatThis`, `.apple`.
+
+| tracker | demo | Makina track (178) | bass loop (123) | piano loop (123) |
+|---|---|---|---|---|
+| Beat This! (upstream's, ported) | 154.9 = upstream | 178.0 = upstream | 122.9 = upstream | no fit = upstream |
+| Apple MusicUnderstanding | 77.5 | 89.0 | 81.9 | 123.1 |
 
 ## Measured on 175 loops
 
@@ -118,7 +133,11 @@ Three things the table says plainly:
 - **Untuned percussion barely registers.** Bongo and shaker loops yield one to four notes; kit
   loops yield twenty and are labelled drums. Vocals are transcribed as pitch (18 notes per loop)
   but rarely labelled `voice` (3 of 40).
-- **Tempo holds where there is a beat.** Within 1 BPM on every kit loop and 31 of 40 bass loops;
+- **On eight-second loops, Apple's tracker beats upstream's.** Rerun with Beat This!: within
+  1 BPM on 48 loops instead of 111, and no steady grid on 118 instead of 41 — its beats wobble
+  past the 5% residual rule on short material that MusicUnderstanding fits. On the two-minute
+  track the order reverses (178 versus 89). Songs: Beat This!. Loops: `--bpm name`.
+- **Tempo holds where there is a beat.** With Apple's tracker, within 1 BPM on every kit loop and 31 of 40 bass loops;
   the 41 loops with no grid are mostly shakers, bongos and half the vocals, where a tracker has
   nothing to hold on to. Of the 23 wrong tempos, 8 were exactly 2/3 (a triplet bassline tracked
   on its subdivision) and 5 were half. Loops carry their tempo in the name, so `fixedTempo:`

@@ -16,7 +16,8 @@ from pathlib import Path
 import numpy as np, torch
 
 HERE = Path(__file__).resolve().parent
-for c in (HERE.parent.parent / "muscriptor", HERE.parent / "muscriptor", Path.home() / "Developer" / "muscriptor"):
+import os
+for c in ([Path(os.environ["MUSCRIPTOR_DIR"])] if os.environ.get("MUSCRIPTOR_DIR") else []) + [HERE.parent.parent / "muscriptor", HERE.parent / "muscriptor", Path.home() / "Developer" / "muscriptor"]:
     if c.exists(): sys.path.insert(0, str(c)); break
 else: sys.exit("clone https://github.com/muscriptor/muscriptor beside this repo")
 from huggingface_hub import hf_hub_download
@@ -30,6 +31,8 @@ ap.add_argument("--audio", required=True)
 ap.add_argument("--out", default=str(HERE / "reference"))
 ap.add_argument("--max-chunks", type=int, default=None)
 ap.add_argument("--reuse", action="store_true", help="reuse chunks.json/mel_*.f32 already in the fixtures dir instead of re-running the upstream decode")
+ap.add_argument("--instruments", help="comma-separated upstream group names: a conditioned + masked reference")
+ap.add_argument("--write-wav", action="store_true", help="also write <out>/audio_16k.wav, the exact samples upstream decoded, for the Swift side to read")
 args = ap.parse_args()
 
 weights = hf_hub_download(f"MuScriptor/muscriptor-{args.size}", "model.safetensors")
@@ -45,12 +48,21 @@ wav = tm._load_wav(args.audio, None)
 seg = int(_SEGMENT_DURATION * _SAMPLE_RATE)
 n_chunks = int(np.ceil(wav.shape[-1] / seg))
 if args.max_chunks: n_chunks = min(n_chunks, args.max_chunks)
+from muscriptor.tokenizer.mt3 import instrument_group_from_names
+import soundfile as sf
+names = [n for n in (args.instruments or "").split(",") if n.strip()]
+instrument_group = instrument_group_from_names(names) if names else None
+forbidden = torch.tensor(tok.forbidden_token_ids(names), dtype=torch.long) if names else None
+out_root = Path(args.out)
+if args.write_wav:
+    out_root.mkdir(parents=True, exist_ok=True)
+    sf.write(str(out_root / "audio_16k.wav"), wav[0].numpy(), _SAMPLE_RATE, subtype="FLOAT")
 conds, seek_times, mels = [], [], []
 mel_cond = lm.condition_provider.conditioners["self_wav"]
 for i in range(n_chunks):
     chunk = wav[:, i * seg:(i + 1) * seg]
     if chunk.shape[-1] < seg: chunk = F.pad(chunk, (0, seg - chunk.shape[-1]))
-    c = tm._build_conditions(chunk, None)[0]
+    c = tm._build_conditions(chunk, instrument_group)[0]
     conds.append(c); seek_times.append(i * _SEGMENT_DURATION)
     with torch.no_grad():
         mels.append(mel_cond._mel_embedding(mel_cond.tokenize(c.wav["self_wav"])))   # [1,501,512] log-mel
@@ -71,7 +83,7 @@ else:
         yield from _orig_generate(*a, **kw)
     lm.generate = recording_generate
     t0 = time.time()
-    stream = list(tm._generate_token_stream(conds, seek_times, 1, 2000, False, 1.0, 1.0, True, True, 1, None))
+    stream = list(tm._generate_token_stream(conds, seek_times, 1, 2000, False, 1.0, 1.0, True, True, 1, forbidden))
     lm.generate = _orig_generate
     print(f"[real] upstream greedy decode on CPU: {time.time() - t0:.1f}s", flush=True)
     cur = None
@@ -99,5 +111,6 @@ else:
 for i, m in enumerate(mels):
     m.numpy().astype(np.float32).tofile(fixtures / f"mel_{i}.f32")
 json.dump({"dims": dims, "eos": tok.eos_id, "initial": lm.card, "inst_tokens": [0], "max_gen_len": 2000,
+           "instruments": names, "size": args.size,
            "chunks": chunks, "audio": str(Path(args.audio).name)}, open(fixtures / "chunks.json", "w"))
 print("[real] fixtures ->", fixtures, flush=True)

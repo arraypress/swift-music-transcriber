@@ -10,12 +10,18 @@ Writes the mel front-end pair, the resampler pairs, and — given a chunks.json
 from Tools/reference_tokens.py — the decoder event stream, the cleaned notes
 and the MIDI upstream writes for them. The repo's fixtures came from the 10 s
 demo clip in the muscriptor checkout (web/public/headache_by_lost_deposit_10s.mp3)
-and the medium fp32 CPU run. Needs a muscriptor checkout beside this repo."""
+and the medium fp32 CPU run. Needs a muscriptor checkout beside this repo.
+
+The mel pair uses the STFT window and filterbank buffers stored in the
+checkpoint (identical across the three sizes), not freshly computed ones: the
+stored window is a half-precision rounding of torch.hann_window(2048), and a
+float32 Hann window moves the near-empty top mel bins by whole log units."""
 import json, sys
 from pathlib import Path
 import numpy as np, torch
 HERE = Path(__file__).resolve().parent
-for c in (HERE.parent.parent / "muscriptor", HERE.parent / "muscriptor", Path.home() / "Developer" / "muscriptor"):
+import os
+for c in ([Path(os.environ["MUSCRIPTOR_DIR"])] if os.environ.get("MUSCRIPTOR_DIR") else []) + [HERE.parent.parent / "muscriptor", HERE.parent / "muscriptor", Path.home() / "Developer" / "muscriptor"]:
     if c.exists(): sys.path.insert(0, str(c)); break
 else: sys.exit("clone https://github.com/muscriptor/muscriptor beside this repo")
 from muscriptor.utils.audio import load_audio
@@ -30,15 +36,26 @@ from muscriptor.transcription_model import _build_instrument_for_program
 audio, out = sys.argv[1], Path(sys.argv[2]); out.mkdir(parents=True, exist_ok=True)
 torch.manual_seed(0)
 
-# 1. mel: the first 5 s chunk of the clip at 16 kHz, and its log-mel
+# 1. mel: the first 5 s chunk of the clip at 16 kHz, and its log-mel, through
+#    the window and filterbank the checkpoint actually carries
+from huggingface_hub import hf_hub_download
+from safetensors import safe_open
+with safe_open(hf_hub_download("MuScriptor/muscriptor-medium", "model.safetensors"), "pt") as f:
+    prefix = "condition_provider.conditioners.self_wav.mel_spec_transform."
+    stored_window = f.get_tensor(prefix + "spectrogram.window").float()
+    stored_fb = f.get_tensor(prefix + "mel_scale.fb").float()
+stored_window.numpy().astype(np.float32).tofile(out / "mel_window.f32")
 wav = load_audio(audio, target_sr=16000)            # [1, T]
 chunk = wav[:, :80000]
 chunk.numpy().astype(np.float32).tofile(out / "mel_input.f32")
 cond = MelSpectrogramConditioner(output_dim=8, device="cpu", sample_rate=16000, n_fft=2048, frame_rate=100,
                                  n_mel_bins=512, log_scale=True, eps=1e-6, normalize_audio=False)
+cond.mel_spec_transform.spectrogram.window.data = stored_window
+cond.mel_spec_transform.mel_scale.fb.data = stored_fb
 mel = cond._mel_embedding(WavCondition(chunk.unsqueeze(0), torch.tensor([80000]), [16000], [None], [0.0]))
 mel.numpy().astype(np.float32).tofile(out / "mel_output.f32")
-melscale_fbanks(1025, 0.0, 8000.0, 512, 16000).numpy().astype(np.float32).tofile(out / "mel_filterbank.f32")
+stored_fb.numpy().astype(np.float32).tofile(out / "mel_filterbank.f32")
+assert (melscale_fbanks(1025, 0.0, 8000.0, 512, 16000) - stored_fb).abs().max() < 1e-3   # the bank is a fresh torchaudio bank up to float32 noise
 print("mel:", tuple(mel.shape))
 
 # 2. resampler: half a second of noise-plus-tone at 44.1 kHz and 48 kHz -> 16 kHz

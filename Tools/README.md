@@ -7,8 +7,10 @@ checkout of [muscriptor](https://github.com/muscriptor/muscriptor) beside this r
 | script | what |
 |---|---|
 | `export.py` | MuScriptor checkpoint → `scribe-<size>-<precision>.aimodel`. `--install` copies it into `~/Library/Application Support/scribe/models`. |
+| `export_beat_this.py` | Beat This! `final0` (the tracker MuScriptor uses; MIT) → `scribe-beat-this-float32.aimodel`. One method re-authored for Core AI's compiler; asserts it matches the original before exporting. `--install` copies it beside the transcriber models. |
 | `dump_fixtures.py` | Regenerates the golden test fixtures (mel, resampler, decoder events, notes, MIDI) from the upstream code. |
-| `reference_tokens.py` | Records upstream's per-chunk prompts and greedy tokens for a clip, for parity work against `MusicTranscriber.tokenObserver`. |
+| `reference_tokens.py` | Records upstream's per-chunk prompts and greedy tokens for a clip (`--write-wav` also keeps the exact 16 kHz samples), for `ParityTests` against `MusicTranscriber.tokenObserver`. |
+| `dump_logits.py` | Records upstream's teacher-forced logits for one chunk of such a clip, for `LogitParityTests` (per-step PSNR, argmax flips, top-two margins). |
 
 ## How the export works
 
@@ -33,8 +35,14 @@ fp16 run does.
 ```sh
 uv run Tools/export.py --size medium --install
 uv run Tools/export.py --size large --dtype float16
+uv run Tools/export_beat_this.py --install
 uv run Tools/dump_fixtures.py ../muscriptor/web/public/headache_by_lost_deposit_10s.mp3 Tests/MusicTranscriberTests/Fixtures reference/medium/fixtures/chunks.json
+uv run Tools/reference_tokens.py --size medium --audio <clip.wav> --out reference/<clip> --write-wav   # then dump_logits.py medium reference/<clip> 0
 ```
+
+`dump_fixtures.py` takes the STFT window and mel filterbank from the checkpoint itself (they are
+identical in all three sizes); the stored window is a half-precision rounding of
+`torch.hann_window(2048)`, and the Swift front end carries that exact buffer (`MelWindow.swift`).
 
 The toolchain is beta (`coreai-torch 0.4.2`, `coreai-core 1.0.0b2`, torch 2.13, Python 3.11/3.12).
 The Python runtime in `coreai-core` segfaults on the stateful graph; the Swift tests are the gate.

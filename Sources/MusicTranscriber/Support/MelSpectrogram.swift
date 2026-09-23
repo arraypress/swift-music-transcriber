@@ -39,8 +39,8 @@ public struct MelSpectrogram: Sendable {
 
     public init() {
         filterbank = Self.htkFilterbank()
-        // torch.hann_window is periodic: 0.5 − 0.5·cos(2πn/N).
-        window = (0..<Self.nFFT).map { 0.5 * (1 - cos(2 * Float.pi * Float($0) / Float(Self.nFFT))) }
+        // Not a freshly computed Hann window: the checkpoint's own buffer, see MelWindow.
+        window = MelWindow.stored
     }
 
     /// Compute `[frames][mels]` log-mel values for exactly ``chunkSamples`` samples.
