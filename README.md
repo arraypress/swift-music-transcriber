@@ -148,6 +148,62 @@ Three things the table says plainly:
   applies nothing; nothing else could either. `quantize` against the loop's own grid put every
   one of its 43 onsets exactly on a sixteenth. For loops, quantize.
 
+## Measured against MIDI ground truth
+
+712 loops from four commercial sample packs that ship the MIDI they were played from: bass
+loops, acid lines, pads, synth lines and stabs, plus a dozen construction-kit stems. Medium fp32,
+defaults, raw events (`--format json`, no tracker), scored with `mir_eval` the standard way —
+a note is correct when its onset is within 50 ms and its pitch within 50 cents; offsets are
+ignored. `Tools/score_midi.py` is the scorer.
+
+Two things about the ground truth first, because they set the ceiling:
+
+- **The MIDI is what was played, not what sounds.** A bass patch plays one or two octaves
+  below the written note on 340 of 712 files, so the honest pitch score allows a per-file
+  whole-octave shift (the "octave" column; "exact" is there to show the gap). Chord-stab,
+  gated and octave-layered patches make more notes sound than the MIDI holds, which the model
+  transcribes and the score counts against it: the model writes 1.8 notes for every MIDI note.
+- **The model does not hear everything.** 59 files produced nothing: sub-only basslines (70–93%
+  of their energy below 120 Hz) and quiet, bright, percussive synth textures. Peak-normalising
+  three of the latter changed nothing, so it is not a level problem.
+
+| loops | files | octave F1 | precision | recall | onset-only F1 | first note found |
+|---|---|---|---|---|---|---|
+| bass (pack A) | 90 | 0.69 | 0.64 | 0.81 | 0.74 | 73% |
+| bass (pack B) | 90 | 0.63 | 0.53 | 0.87 | 0.68 | 71% |
+| synth lines (pack B) | 90 | 0.57 | 0.49 | 0.74 | 0.62 | 67% |
+| synth loops, several parts each (pack C) | 160 | 0.57 | 0.50 | 0.77 | 0.62 | 71% |
+| acid lines | 90 | 0.49 | 0.44 | 0.63 | 0.57 | 64% |
+| synth loops (pack A) | 90 | 0.42 | 0.38 | 0.57 | 0.46 | 47% |
+| pads | 90 | 0.33 | 0.28 | 0.44 | 0.38 | 72% |
+| construction-kit stems | 12 | 0.31 | 0.30 | 0.33 | 0.35 | 0% |
+| **all** | **712** | **0.53** | **0.47** | **0.69** | **0.58** | **69%** |
+
+Matched onsets sit a median 6 ms late. Recall is the number to read: on monophonic bass the
+model finds 81–87% of the written notes, and most of what it adds is the patch's own sub-octave
+layer. Pads are the weak class — sustained chords come back as repeated notes, three for one.
+
+**The same MIDI rendered with a General MIDI piano scores 0.95.** To separate the model from the
+patches, every MIDI file was rendered through the library's own `Auralizer` (Apple's GM
+synthesiser, the file's program, no effects) and transcribed: 749 renders, exact pitch, **note
+F1 0.947, precision 0.96, recall 0.94**, 0.97 notes written per note played, first note found
+91%, 14 silent files (very sparse or very high parts). Pads 0.93, everything else 0.93–0.98. So
+when the audio contains exactly the written notes the model finds them; the gap to 0.53 on the
+packs is what the patches add and what the timbres hide.
+
+**Large versus medium**, same 120 real loops: 0.50 → 0.52 overall, but on the cleanest bass
+pack 0.63 → **0.78** with precision 0.60 → 0.79 — large writes 1.06 notes per MIDI note where
+medium writes 1.32, because it stops transcribing the sub-octave layer as a second note. Pads
+and the harder synth pack lose a little. Large costs 4× the time; on bass it pays.
+
+**The first note of a loop was a decoding rule, not a hearing problem.** The model reports a
+note that is already sounding at a chunk's first frame in the chunk's tie prologue, and a loop
+that starts on beat one begins that way. Upstream's event builder ignores a tie for a note that
+is not open — which at the start of a recording is every one of them — so with upstream's
+reading the first note was found on 3% of 235 loops. `leadingTies` (`--leading-ties`) reads it
+as a note starting at time zero; the tokens are identical. Same 235 loops: first note 64%,
+octave F1 0.54 → 0.56. `drop` reproduces upstream's stream exactly.
+
 ## The model is not bundled
 
 The weights are **CC BY-NC 4.0** (non-commercial) and gated on Hugging Face; the code is MIT.

@@ -93,6 +93,18 @@ float32 torchaudio bank (≤3.1e-4 from ours in double), below the STFT noise
 floor; it is not embedded. Synthetic fixtures (sine + noise) never showed
 this — only lowpassed real audio does.
 
+## Leading ties (0.5.0): the first note of a loop
+The model lists the notes already sounding at a chunk's first frame as its
+tie prologue (`prog(33) pitch(27) TIE …`). A note at time zero of the
+recording is reported THAT way, not as an onset, and upstream's event builder
+ignores a tie nothing was open for — so every loop that starts on beat one
+lost its first note (found 3% of the time on 235 pack loops with MIDI). The
+tokens are identical to upstream's; only the reading differs.
+`TranscriptionOptions.leadingTies` (`.notes` default, `.drop` = upstream) and
+the CLI's `--leading-ties`. Fixture tests that record upstream's event stream
+pass `.drop` explicitly. Verify the raw prologue with a `tokenObserver` if in
+doubt; a chunk-0 prompt is empty, the tokens start with the tie set.
+
 ## Fixtures and parity
 `Tools/dump_fixtures.py` regenerates `Tests/.../Fixtures` from a muscriptor
 checkout (mel pair through the checkpoint's own window and bank);

@@ -23,6 +23,7 @@ import Foundation
 public struct TokenDecoder {
 
     private let frameRate: Int
+    private let leadingTies: TranscriptionOptions.LeadingTies
 
     // Open notes, (program, pitch) → the start event. Insertion-ordered so the
     // end-of-stream closes replay in onset order, as upstream's dict does.
@@ -43,8 +44,12 @@ public struct TokenDecoder {
 
     struct Key: Hashable { let program: Int; let pitch: Int }
 
-    public init(frameRate: Int = EventVocabulary.frameRate) {
+    /// `leadingTies` says what a tie-prologue note with nothing to sustain
+    /// means; see ``TranscriptionOptions/leadingTies``. Pass `.drop` to
+    /// reproduce upstream's event stream.
+    public init(frameRate: Int = EventVocabulary.frameRate, leadingTies: TranscriptionOptions.LeadingTies = .notes) {
         self.frameRate = frameRate
+        self.leadingTies = leadingTies
     }
 
     /// The (program, pitch) pairs currently sounding, sorted — the next chunk's
@@ -88,7 +93,19 @@ public struct TokenDecoder {
                 velocity = nil
                 let ended = open.filter { !tieSet.contains($0.key) }
                 open.removeAll { !tieSet.contains($0.key) }
-                return ended.map { end($0.start, at: seekTime) }
+                var events = ended.map { end($0.start, at: seekTime) }
+                if leadingTies == .notes {
+                    // A tie for a note that is not sounding: the model says it is
+                    // already playing at this chunk's first frame, so it starts here.
+                    let fresh = tieSet.filter { key in !open.contains { $0.key == key } }
+                        .sorted { ($0.program, $0.pitch) < ($1.program, $1.pitch) }
+                    for key in fresh {
+                        let start = mint(pitch: key.pitch, time: seekTime, program: key.program, isDrum: false)
+                        open.append((key, start))
+                        events.append(.noteStart(start))
+                    }
+                }
+                return events
             case .shift:
                 // No tie token: malformed chunk. Close everything, drop the rest.
                 inPrologue = false

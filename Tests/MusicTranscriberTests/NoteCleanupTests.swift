@@ -15,7 +15,7 @@ final class NoteCleanupTests: XCTestCase {
 
     private func decodedNotes() throws -> [TranscribedNote] {
         let file = try Fixture.json("decoder.json", as: TokenDecoderTests.File.self)
-        var decoder = TokenDecoder()
+        var decoder = TokenDecoder(leadingTies: .drop)   // upstream's reading, which these fixtures record
         var events: [TranscriptionEvent] = []
         for (i, chunk) in file.chunks.enumerated() {
             events += decoder.beginChunk(seekTime: Double(i) * 5, nextSeekTime: i + 1 < file.chunks.count ? Double(i + 1) * 5 : nil)

@@ -25,7 +25,9 @@ final class EndToEndTests: XCTestCase {
         guard transcriber.decoder.variant == .medium else {
             throw XCTSkip("the installed model is not medium; the fixture is a medium run")
         }
-        let result = try await transcriber.transcribe(try Fixture.url("demo_16k.wav"), tempo: .off)
+        var options = TranscriptionOptions()
+        options.leadingTies = .drop   // the fixture is upstream's event stream, which drops them
+        let result = try await transcriber.transcribe(try Fixture.url("demo_16k.wav"), options: options, tempo: .off)
 
         XCTAssertEqual(result.events.count, file.events.count)
         for (record, expected) in zip(result.events, file.events) {

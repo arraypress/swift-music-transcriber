@@ -166,7 +166,7 @@ public final class MusicTranscriber: @unchecked Sendable {
         let stateCount = beams > 1 ? beams * (guided ? 2 : 1) + beams * (guided ? 2 : 1) : (guided ? 2 : 1)
         let states = (0..<stateCount).map { _ in decoder.makeState() }
 
-        var tokenDecoder = TokenDecoder()
+        var tokenDecoder = TokenDecoder(leadingTies: options.leadingTies)
         yield(.progress(.init(completed: 0, total: chunks.count)))
 
         for (index, chunk) in chunks.enumerated() {

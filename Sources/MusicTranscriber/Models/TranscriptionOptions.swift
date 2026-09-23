@@ -15,6 +15,14 @@ import Foundation
 /// instrument allowed. Each field documents what changing it trades away.
 public struct TranscriptionOptions: Sendable, Codable, Equatable {
 
+    /// See ``leadingTies``.
+    public enum LeadingTies: String, Sendable, Codable, CaseIterable {
+        /// A tie-prologue note with nothing to sustain starts at the chunk boundary.
+        case notes
+        /// Ignore it, as upstream does.
+        case drop
+    }
+
     /// Sample from the softmax instead of taking the argmax. Non-deterministic
     /// unless ``seed`` is set. Off by default because the argmax is what the
     /// model was evaluated with.
@@ -59,6 +67,21 @@ public struct TranscriptionOptions: Sendable, Codable, Equatable {
 
     /// Seed for ``sampling``. Nil draws from the system generator.
     public var seed: UInt64?
+
+    /// What to do with a tie-prologue note that nothing is sounding for.
+    ///
+    /// The model opens every chunk by listing the notes already sounding at its
+    /// first frame, then a `tie` token. A note in that list that is open from
+    /// the previous chunk sustains. One that is not — always the case at the
+    /// start of the recording, where nothing can be open — is ignored by
+    /// upstream's event builder, so a recording that begins on a note loses
+    /// that note. Measured on 700 loops from commercial packs, whose MIDI
+    /// starts on beat one: with ``LeadingTies/drop`` the first note was found
+    /// 1% of the time, because the model reports it as sounding at time zero
+    /// rather than as an onset. ``LeadingTies/notes`` opens such a note at the
+    /// chunk boundary instead. The tokens are the same either way; only their
+    /// reading differs. `drop` reproduces upstream's event stream exactly.
+    public var leadingTies: LeadingTies = .notes
 
     public init() {}
 

@@ -10,6 +10,7 @@ checkout of [muscriptor](https://github.com/muscriptor/muscriptor) beside this r
 | `export_beat_this.py` | Beat This! `final0` (the tracker MuScriptor uses; MIT) → `scribe-beat-this-float32.aimodel`. One method re-authored for Core AI's compiler; asserts it matches the original before exporting. `--install` copies it beside the transcriber models. |
 | `dump_fixtures.py` | Regenerates the golden test fixtures (mel, resampler, decoder events, notes, MIDI) from the upstream code. |
 | `reference_tokens.py` | Records upstream's per-chunk prompts and greedy tokens for a clip (`--write-wav` also keeps the exact 16 kHz samples), for `ParityTests` against `MusicTranscriber.tokenObserver`. |
+| `score_midi.py` | Scores `--format json` output against MIDI ground truth (mir_eval onset+pitch F1, exact / octave / any-shift / chroma / onset-only, first-note recall) from a pairs manifest. |
 | `dump_logits.py` | Records upstream's teacher-forced logits for one chunk of such a clip, for `LogitParityTests` (per-step PSNR, argmax flips, top-two margins). |
 
 ## How the export works
@@ -39,6 +40,12 @@ uv run Tools/export_beat_this.py --install
 uv run Tools/dump_fixtures.py ../muscriptor/web/public/headache_by_lost_deposit_10s.mp3 Tests/MusicTranscriberTests/Fixtures reference/medium/fixtures/chunks.json
 uv run Tools/reference_tokens.py --size medium --audio <clip.wav> --out reference/<clip> --write-wav   # then dump_logits.py medium reference/<clip> 0
 ```
+
+For an exact-truth check, render MIDI with the library's own synthesiser and score the
+transcription of the render: `Auralizer.synthesize(midi: Data(contentsOf: url))` gives 44.1 kHz
+samples, `AudioWriter.writeWAV` writes them — ten lines of Swift in a scratch package — then
+`scribe <dir> --format json --detect-tempo off --out <run>` and `score_midi.py <run> --manifest`.
+749 renders scored 0.947 on 2026-09-23.
 
 `dump_fixtures.py` takes the STFT window and mel filterbank from the checkpoint itself (they are
 identical in all three sizes); the stored window is a half-precision rounding of

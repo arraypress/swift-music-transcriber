@@ -83,7 +83,7 @@ final class ParityTests: XCTestCase {
 
     /// Notes from per-chunk (prompt, tokens) through the same decoder and cleanup.
     static func notes(from chunks: [([Int], [Int])]) -> [TranscribedNote] {
-        var decoder = TokenDecoder()
+        var decoder = TokenDecoder(leadingTies: .drop)   // upstream's reading, which these fixtures record
         var events: [TranscriptionEvent] = []
         for (i, chunk) in chunks.enumerated() {
             events += decoder.beginChunk(seekTime: Double(i) * 5, nextSeekTime: i + 1 < chunks.count ? Double(i + 1) * 5 : nil)
