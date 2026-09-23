@@ -69,6 +69,14 @@ model the same 16 kHz samples upstream decoded with libsndfile. Given the MP3 it
 AVFoundation decodes it slightly differently, and on `large` that moved the transcription from
 190 notes to 161 (medium was unchanged). For reproducible results feed WAV or FLAC.
 
+**Tempo can be an octave out, and the notes can fix it.** The tracker hears the half-time pulse
+on fast electronic music — 89 for a 178 BPM Makina track, 77.5 for the 155 BPM demo — and
+two-thirds on some basslines. `tempoRange:` declares where the tempo plausibly lives and the
+detection is snapped in by the smallest musical ratio; when two ratios land (89 reaches
+120…190 as 133.5 and as 178) the transcribed drum hits decide, because at the true tempo they
+sit on the beats. That is a measurement on the model's own output, not a guess: 178 and 155
+on those two, and a 123 BPM bassline heard at 82 comes back as 123.
+
 **The beat tracker is not upstream's.** Tempo and metre come from Apple's MusicUnderstanding
 (via [swift-music-analysis](https://github.com/arraypress/swift-music-analysis)); upstream uses
 `beat_this`. The fitting rules on top — least-squares tempo, 90% downbeat agreement for a metre,
@@ -98,6 +106,11 @@ key root is the fleet's `midi key` run over the transcription against the filena
 
 Three things the table says plainly:
 
+- **Two synths in one class share one track, and only a better model hears them apart.** On a
+  Makina track, `medium` put the lead and the pad on one piano track; `large`, unforced, wrote
+  a separate `synth_lead` track of 338 notes. Forcing a synth-only mask on `medium` split them
+  too, but shoved 931 melodic notes onto the bass — that is coercion, not accuracy. For full
+  mixes where parts merge, use `large`.
 - **Synths are not a class the model reaches for.** Twenty synth loops, zero `synth_lead` or
   `synth_pad` labels; they come back as guitars and pianos. With
   `--instruments synth_lead,synth_pad,electric_bass,drums` the same loops produce **48 notes

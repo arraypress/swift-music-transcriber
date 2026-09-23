@@ -48,9 +48,14 @@ public final class MusicTranscriber: @unchecked Sendable {
     ///   - tempo: whether to detect a beat grid for the MIDI; see ``TempoDetection``.
     ///   - fixedTempo: a known BPM — a loop's, from its name — which skips the
     ///     tracker and writes that tempo in 4/4 with the downbeat at zero.
+    ///   - tempoRange: where the tempo plausibly lives. A detection outside it is
+    ///     snapped in by the smallest musical ratio (2, 1/2, 3/2, 2/3 …), which is
+    ///     how a half-time hearing of a 178 BPM track becomes 178. See
+    ///     ``BeatGrid/snapped(into:)``.
     ///   - progress: called with the fraction of chunks done, on the caller's task.
     public func transcribe(_ url: URL, options: TranscriptionOptions = .init(),
                            tempo: TempoDetection = .bestEffort, fixedTempo: Double? = nil,
+                           tempoRange: ClosedRange<Double>? = nil,
                            progress: ((Double) -> Void)? = nil) async throws -> Transcription {
         try options.validate()
         let samples = try AudioLoader.load(url)
@@ -85,6 +90,12 @@ public final class MusicTranscriber: @unchecked Sendable {
             switch record { case .start(let s): return .noteStart(s); case .end(let e): return .noteEnd(e) }
         }
         let notes = NoteCleanup.cleaned(NoteCleanup.notes(from: events))
+        if let tempoRange, let g = grid {
+            // Drum hits are the strongest tempo evidence there is; fall back to
+            // every onset when the track has few.
+            let drums = notes.filter(\.isDrum).map(\.onset)
+            grid = g.snapped(into: tempoRange, onsets: drums.count >= 20 ? drums : notes.map(\.onset))
+        }
         if let g = grid { grid = g.withOnsetDelay(onsets: notes.map(\.onset)) }
         return Transcription(notes: notes, events: records, beatGrid: grid, warnings: warnings,
                              audioDuration: audioDuration, decodeSeconds: decodeSeconds, tokenCount: tokenCount)

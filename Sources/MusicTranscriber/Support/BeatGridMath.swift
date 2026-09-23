@@ -43,6 +43,30 @@ public enum BeatGridMath {
     /// synthesis back up with the original audio.
     public static let barOffsetMarker = "muscriptor:bar_offset="
 
+    /// Tempo-octave corrections tried, smallest first, speed-ups before
+    /// slow-downs — the fleet's list from `swift-music-analysis`. Every mishear a
+    /// beat tracker makes is a clean ratio of the truth: MusicUnderstanding gave
+    /// 89 for a 178 BPM Makina track, 77.5 for the 155 BPM demo, 82 for a 123
+    /// BPM bassline (2/3).
+    public static let snapMultipliers: [Double] = [1, 4 / 3, 3 / 4, 3 / 2, 2 / 3, 2, 1 / 2, 3, 1 / 3, 4, 1 / 4]
+
+    /// The musical ratios that bring `bpm` inside `range`, smallest correction
+    /// first. Empty when it already is inside or none can.
+    public static func snapCandidates(bpm: Double, into range: ClosedRange<Double>) -> [Double] {
+        if range.contains(bpm) { return [] }
+        return snapMultipliers.dropFirst().filter { range.contains(bpm * $0) }
+    }
+
+    /// The smallest musical ratio that brings `bpm` inside `range`, or 1 when it
+    /// already is or none can. A declared prior, not a guess: nothing happens
+    /// unless the caller says where the tempo plausibly lives. With a wide range
+    /// more than one ratio can land — 89 reaches 120…190 as 133.5 and as 178 —
+    /// and this picks the smaller; ``BeatGrid/snapped(into:onsets:)`` lets the
+    /// transcription decide instead.
+    public static func snapMultiplier(bpm: Double, into range: ClosedRange<Double>) -> Double {
+        snapCandidates(bpm: bpm, into: range).first ?? 1
+    }
+
     /// A measured lag of the onsets against a beat subdivision.
     public struct OnsetDelay: Equatable, Sendable {
         /// Signed seconds, positive when the onsets are late.

@@ -75,6 +75,53 @@ public struct BeatGrid: Codable, Sendable, Equatable {
     /// What is written when nothing was detected: 120 BPM, no meter.
     public static let placeholder = BeatGrid(bpm: 120, beatsPerBar: nil, firstDownbeat: 0)
 
+    /// This grid with its tempo snapped into `range` by a musical ratio.
+    ///
+    /// The beat list is rebuilt at the new tempo from the first downbeat across
+    /// the tracked span, so the onset-lag measurement and `quantize` see the
+    /// corrected pulse; beats per bar and the downbeat stay as tracked, which
+    /// halves or doubles the bar in seconds rather than turning 4/4 into 8/4.
+    /// A tempo already inside the range, a fixed grid, or one no ratio can
+    /// bring inside comes back unchanged.
+    ///
+    /// When several ratios land inside — 89 reaches 120…190 as 133.5 (×3/2) and
+    /// as 178 (×2) — `onsets` decide: at the true tempo the notes, and above all
+    /// the drum hits, sit on the beats; at a wrong ratio they smear around the
+    /// circle. The candidate whose beat-level concentration is highest wins.
+    /// Without onsets, or with fewer than twenty, the smallest ratio wins.
+    public func snapped(into range: ClosedRange<Double>, onsets: [Double]? = nil) -> BeatGrid {
+        guard !isFixed else { return self }
+        let candidates = BeatGridMath.snapCandidates(bpm: bpm, into: range)
+        guard let first = candidates.first else { return self }
+        var choice = first
+        if candidates.count > 1, let onsets, onsets.count >= 20 {
+            var best = -1.0
+            for factor in candidates {
+                let candidate = rebuilt(at: bpm * factor)
+                guard let beats = candidate.beats else { continue }
+                let phases = BeatGridMath.onsetPhases(onsets: onsets, beats: beats)
+                guard phases.count >= 20 else { continue }
+                let score = BeatGridMath.phaseConcentration(phases, subdivision: 1).concentration
+                if score > best + 1e-9 { best = score; choice = factor }
+            }
+        }
+        return rebuilt(at: bpm * choice)
+    }
+
+    /// The same span and downbeat at another tempo.
+    func rebuilt(at newBPM: Double) -> BeatGrid {
+        let step = 60 / newBPM
+        var list: [Double]? = nil
+        if let beats, let first = beats.first, let last = beats.last {
+            var built: [Double] = []
+            var t = firstDownbeat
+            while t - step >= first - 1e-9 { t -= step }
+            while t <= last + 1e-9 { built.append(t); t += step }
+            list = built
+        }
+        return BeatGrid(bpm: newBPM, beatsPerBar: beatsPerBar, firstDownbeat: firstDownbeat, beats: list)
+    }
+
     /// Seconds per bar, when the meter is known.
     public var barSeconds: Double? { beatsPerBar.map { Double($0) * 60 / bpm } }
 

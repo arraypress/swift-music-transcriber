@@ -51,6 +51,12 @@ misses are 2/3 (triplet basslines) and 1/2. Documented, not "fixed" — the fix
 is `fixedTempo:` / `--bpm name` (0.2.0): a fixed grid is never bar-shifted and
 its synthetic beats still let quantize find the subdivision.
 
+## Tempo octave
+`tempoRange:` / `--bpm-range lo-hi`: fleet multipliers (from swift-music-analysis)
+snap the detection in; with a wide range two ratios can land (89 → 133.5 or
+178) so the drum onsets' beat-level concentration picks. Measured: 178 on the
+Makina track (user confirmed), 155 on the demo, 123 for the 82 bassline.
+
 ## Timing
 The model's onsets DRIFT within a chunk: on the 123 BPM piano loop, 35 ms
 early at 0.2 s converging to ~10 ms late by 3 s (frac-of-sixteenth 0.72 →
