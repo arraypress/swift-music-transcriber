@@ -8,6 +8,8 @@ checkout of [muscriptor](https://github.com/muscriptor/muscriptor) beside this r
 |---|---|
 | `export.py` | MuScriptor checkpoint → `scribe-<size>-<precision>.aimodel`. `--install` copies it into `~/Library/Application Support/scribe/models`. |
 | `export_beat_this.py` | Beat This! `final0` (the tracker MuScriptor uses; MIT) → `scribe-beat-this-float32.aimodel`. One method re-authored for Core AI's compiler; asserts it matches the original before exporting. `--install` copies it beside the transcriber models. |
+| `export_piano.py` | ByteDance piano transcription (Kong et al. 2020, Apache 2.0) → `scribe-piano-float32.aimodel`: the conv trunks in the graph, the GRU and head weights as a flat `parameters` entry point (Core AI has no recurrent op; the recurrences run in Swift). Downloads the checkpoint from Zenodo. `--install`. |
+| `piano_fixtures.py` | Records upstream's intermediate tensors, stitched outputs, events and MIDI for clips, for `PianoTests`. |
 | `dump_fixtures.py` | Regenerates the golden test fixtures (mel, resampler, decoder events, notes, MIDI) from the upstream code. |
 | `reference_tokens.py` | Records upstream's per-chunk prompts and greedy tokens for a clip (`--write-wav` also keeps the exact 16 kHz samples), for `ParityTests` against `MusicTranscriber.tokenObserver`. |
 | `score_midi.py` | Scores `--format json` output against MIDI ground truth (mir_eval onset+pitch F1, exact / octave / any-shift / chroma / onset-only, first-note recall) from a pairs manifest. |

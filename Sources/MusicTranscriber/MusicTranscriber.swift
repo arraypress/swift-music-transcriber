@@ -35,8 +35,8 @@ public final class MusicTranscriber: @unchecked Sendable {
 
     /// The Beat This! tracker, loaded once per instance on first use. Loading
     /// it per file cost a second a loop across a folder.
-    private var beatTracker: BeatThisTracker?
-    private var beatTrackerMissing = false
+    /// The beat tracker, loaded once and shared with the piano engine when both run.
+    public let tempo = TempoResolver()
 
     /// Load a model asset. See ``ModelLocator``.
     public init(model url: URL) async throws {
@@ -68,18 +68,8 @@ public final class MusicTranscriber: @unchecked Sendable {
         let audioDuration = Double(samples.count) / Double(MelSpectrogram.sampleRate)
         var warnings: [String] = []
 
-        var grid: BeatGrid?
-        if let fixedTempo {
-            guard fixedTempo > 0 else { throw MusicTranscriberError.invalidOptions("a fixed tempo must be positive") }
-            grid = .fixed(bpm: fixedTempo, duration: audioDuration)
-        } else if tempo != .off {
-            do {
-                grid = try await detectGrid(url: url, samples: samples, duration: audioDuration, tracker: tracker)
-            } catch let error as MusicTranscriberError {
-                if tempo == .required { throw error }
-                warnings.append("\(error.localizedDescription); falling back to the placeholder tempo")
-            }
-        }
+        var grid = try await self.tempo.grid(url: url, samples: samples, duration: audioDuration, tempo: tempo,
+                                             fixedTempo: fixedTempo, tracker: tracker, warnings: &warnings)
 
         let started = Date()
         var records: [TranscriptionEvent.NoteEventRecord] = []
@@ -205,29 +195,7 @@ public final class MusicTranscriber: @unchecked Sendable {
     /// MusicUnderstanding — and fit it with upstream's rules.
     public func detectGrid(url: URL, samples: [Float], duration: Double,
                            tracker: BeatTracker = .automatic) async throws -> BeatGrid {
-        guard duration >= 1 else {
-            throw MusicTranscriberError.noSteadyTempo(String(format: "Audio is %.2fs long, too short to detect a tempo", duration))
-        }
-        if tracker != .apple, let beatThis = try await loadBeatTracker(required: tracker == .beatThis) {
-            let (beats, downbeats) = try await beatThis.track(samples16k: samples)
-            return try BeatGridMath.grid(beats: beats, downbeats: downbeats)
-        }
-        return try await Self.detectGrid(url: url, duration: duration)
-    }
-
-    /// The cached tracker, loading it on first use; nil when it is not installed
-    /// and not required.
-    private func loadBeatTracker(required: Bool) async throws -> BeatThisTracker? {
-        if let beatTracker { return beatTracker }
-        if beatTrackerMissing && !required { return nil }
-        do {
-            let tracker = try await BeatThisTracker(contentsOf: try ModelLocator.resolveBeatTracker())
-            beatTracker = tracker
-            return tracker
-        } catch MusicTranscriberError.modelNotFound where !required {
-            beatTrackerMissing = true
-            return nil
-        }
+        try await tempo.detect(url: url, samples: samples, duration: duration, tracker: tracker)
     }
 
     /// Detect the beat grid with MusicUnderstanding and upstream's fitting rules.

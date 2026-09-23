@@ -27,6 +27,9 @@ public struct Transcription: Codable, Sendable {
     /// could not be detected under best effort.
     public let warnings: [String]
 
+    /// Sustain-pedal presses. Empty except from the piano engine.
+    public let pedals: [PedalEvent]
+
     /// Seconds of audio.
     public let audioDuration: Double
 
@@ -37,11 +40,13 @@ public struct Transcription: Codable, Sendable {
     public let tokenCount: Int
 
     public init(notes: [TranscribedNote], events: [TranscriptionEvent.NoteEventRecord], beatGrid: BeatGrid?,
-                warnings: [String], audioDuration: Double, decodeSeconds: Double, tokenCount: Int) {
+                warnings: [String], audioDuration: Double, decodeSeconds: Double, tokenCount: Int,
+                pedals: [PedalEvent] = []) {
         self.notes = notes
         self.events = events
         self.beatGrid = beatGrid
         self.warnings = warnings
+        self.pedals = pedals
         self.audioDuration = audioDuration
         self.decodeSeconds = decodeSeconds
         self.tokenCount = tokenCount

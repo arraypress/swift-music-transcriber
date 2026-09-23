@@ -204,6 +204,40 @@ reading the first note was found on 3% of 235 loops. `leadingTies` (`--leading-t
 as a note starting at time zero; the tokens are identical. Same 235 loops: first note 64%,
 octave F1 0.54 → 0.56. `drop` reproduces upstream's stream exactly.
 
+## The piano engine
+
+For solo piano there is a second model: **High-resolution Piano Transcription with Pedals**
+(Kong, Li, Song, Hou, Wang — ByteDance, 2020; Apache 2.0; 43M parameters), the one that hears
+what MuScriptor cannot: a velocity for every note and the sustain pedal. `PianoTranscriber`
+loads `scribe-piano-float32.aimodel` (136 MB) and returns notes with velocity plus pedal events;
+`MIDIAssembly` writes them as note velocities and controller 64 on one acoustic-piano track,
+with the same tempo-grid handling as the MuScriptor path. In the CLI: `--engine piano`.
+
+Core AI has no recurrent op, and this model is half GRU: a decomposed GRU unrolls to about
+770,000 ops at its size. So the asset carries the convolutional trunks as a graph and every
+recurrent and head weight as a flat vector, and the sixteen bidirectional GRUs run in Swift on
+Accelerate. Nothing was re-authored or retrained. Held to upstream's Python on a real piano
+loop and a 17-second, three-segment piece:
+
+| stage | result |
+|---|---|
+| trunk through Core AI (GPU) | 155 dB PSNR against upstream's activations |
+| Swift GRU on upstream's own trunk activations | 112 dB against PyTorch |
+| the seven framewise outputs | 123–147 dB |
+| **note and pedal events** | **identical: every note, velocity and pedal, times within 0.001 ms** |
+
+The post-processor is a line-for-line port, including a Python quirk (a note starting on the
+very first frame is never emitted), because identical output is the point.
+
+**What it scores, and what it is for.** On 540 of the General MIDI piano renders above (exact
+truth), the piano engine reaches note F1 **0.87** (bass lines 0.92, pads 0.79) where MuScriptor
+medium reaches 0.95 on the same files. That is the model, not the port — its events are
+upstream's — and it is what a specialist trained on real piano recordings does with a synthesised
+piano. On real piano its published number is 0.968 on MAESTRO. Its velocities correlate 0.53
+with the MIDI velocities of the renders and sit about 20 below them; a GM synthesiser's dynamics
+are not a Disklavier's, so treat that as a floor. Use it when you need velocity and pedal from
+a piano recording; use MuScriptor for everything else, including synthesised piano.
+
 ## The model is not bundled
 
 The weights are **CC BY-NC 4.0** (non-commercial) and gated on Hugging Face; the code is MIT.

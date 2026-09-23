@@ -19,7 +19,7 @@ import MIDIFileKit
 /// far the music was shifted to put bar 1 on a downbeat.
 public enum MIDIAssembly {
 
-    /// Velocity written for every note.
+    /// Velocity MuScriptor's notes carry; the piano engine's notes bring their own.
     public static let velocity = 100
 
     /// Ticks per quarter note.
@@ -33,7 +33,8 @@ public enum MIDIAssembly {
     ///   - quantize: snap onsets and offsets to the grid's subdivision, when it
     ///     has one. What sheet music has to be engraved from and not what
     ///     anyone wants to listen to.
-    public static func file(notes input: [TranscribedNote], grid: BeatGrid?, quantize: Bool = false) -> MIDIFile {
+    public static func file(notes input: [TranscribedNote], grid: BeatGrid?, quantize: Bool = false,
+                            pedals: [PedalEvent] = []) -> MIDIFile {
         var grid = grid ?? .placeholder
         if grid.onsetDelay == nil {
             grid = grid.withOnsetDelay(onsets: input.map(\.onset))
@@ -92,15 +93,26 @@ public enum MIDIAssembly {
                     let start = ticks(n.onset + offset)
                     let end = ticks(n.offset + offset)
                     track.note(n.pitch, atBeat: Double(start) * tickBeat,
-                               lasting: Double(end - start) * tickBeat, velocity: velocity)
+                               lasting: Double(end - start) * tickBeat, velocity: n.velocity)
+                }
+                // Sustain rides with the piano: the same lag correction and shift as its notes.
+                if program == pianoProgram {
+                    for p in pedals {
+                        track.sustain(down: true, atBeat: Double(ticks(max(0, p.onset - delay) + offset)) * tickBeat)
+                        track.sustain(down: false, atBeat: Double(ticks(max(0, p.offset - delay) + offset)) * tickBeat)
+                    }
                 }
             }
         }
         return composition.build()
     }
 
-    /// The bytes of ``file(notes:grid:quantize:)``.
-    public static func data(notes: [TranscribedNote], grid: BeatGrid?, quantize: Bool = false) throws -> Data {
-        try MIDIWriter.data(for: file(notes: notes, grid: grid, quantize: quantize))
+    /// The General MIDI program pedal events attach to.
+    static let pianoProgram = 0
+
+    /// The bytes of ``file(notes:grid:quantize:pedals:)``.
+    public static func data(notes: [TranscribedNote], grid: BeatGrid?, quantize: Bool = false,
+                            pedals: [PedalEvent] = []) throws -> Data {
+        try MIDIWriter.data(for: file(notes: notes, grid: grid, quantize: quantize, pedals: pedals))
     }
 }

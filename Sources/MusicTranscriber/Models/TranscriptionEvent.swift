@@ -33,12 +33,16 @@ public enum TranscriptionEvent: Sendable, Hashable {
         /// Whether this is a drum hit.
         public let isDrum: Bool
 
-        public init(pitch: Int, startTime: Double, index: Int, instrument: String, program: Int, isDrum: Bool) {
+        /// MIDI velocity when the engine measured one (the piano engine); absent for MuScriptor.
+        public let velocity: Int?
+
+        public init(pitch: Int, startTime: Double, index: Int, instrument: String, program: Int, isDrum: Bool, velocity: Int? = nil) {
+            self.velocity = velocity
             self.pitch = pitch; self.startTime = startTime; self.index = index
             self.instrument = instrument; self.program = program; self.isDrum = isDrum
         }
 
-        enum CodingKeys: String, CodingKey { case pitch, startTime = "start_time", index, instrument, program, isDrum = "is_drum" }
+        enum CodingKeys: String, CodingKey { case pitch, startTime = "start_time", index, instrument, program, isDrum = "is_drum", velocity }
     }
 
     /// A note stopped sounding.

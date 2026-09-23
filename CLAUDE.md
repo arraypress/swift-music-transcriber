@@ -7,7 +7,7 @@ re-derivation would get wrong.
 
 ## Build & test
 ```bash
-swift build && swift test                     # 41 tests, golden fixtures, no model (2 parity tests skip without env)
+swift build && swift test                     # 49 tests, golden fixtures, no model (parity and piano-model tests skip without assets)
 SCRIBE_MODEL=~/Library/Application\ Support/scribe/models swift test   # + end-to-end parity
 ```
 The end-to-end test needs a **medium fp32** asset and reproduces upstream's decode
@@ -104,6 +104,33 @@ tokens are identical to upstream's; only the reading differs.
 the CLI's `--leading-ties`. Fixture tests that record upstream's event stream
 pass `.drop` explicitly. Verify the raw prologue with a `tokenObserver` if in
 doubt; a chunk-0 prompt is empty, the tokens start with the tie set.
+
+## Piano engine (0.6.0): ByteDance piano transcription, upstream's events exactly
+`Tools/export_piano.py` → `scribe-piano-float32.aimodel` (136 MB, Apache 2.0).
+Kong et al. 2020, checkpoint note_F1=0.9677_pedal_F1=0.9186, 43M params.
+- **Core AI has no GRU/LSTM op.** `aten.gru.input` decomposes to an unrolled
+  graph (9,644 ops for a toy; ~770k at 16 recurrences × 1001 frames). So the
+  asset carries the conv trunks (`trunk`) and every recurrent/head weight as a
+  flat vector (`parameters`, 21M floats, fixed order documented in the script),
+  and `Support/GRU.swift` runs the biGRUs on Accelerate (vDSP_mmul, weights
+  pre-transposed at parse; PyTorch gate order r, z, n). 112 dB vs PyTorch on
+  upstream's own activations; trunk 155 dB through the GPU; outputs 123–147 dB.
+- Front end: torchlibrosa — power spectrum, 229 Slaney mels 30–8000 Hz WITH
+  librosa's `norm="slaney"` (2/bandwidth), 10·log10(max(1e-10, x)); periodic
+  Hann; bn0 is inside the graph. Ten-second segments, 1001 frames, exactly.
+- Segmentation is upstream's: pad to a multiple of 10 s, hop 5 s; `deframe`
+  keeps one segment whole (1001 frames) but for N>1 drops each segment's last
+  frame and stitches 750 / 500… / 750 → 500N + 500 frames. Not truncated.
+- Post-processing is a line-for-line port INCLUDING Python's `if bgn:` (frame 0
+  is falsy → a note at frame 0 never starts). Regression shift formula, the
+  6-second cap, pedal "10 frames after quiet". Events identical to upstream on
+  both reference clips (166/9 and 106/18 events, times within 0.001 ms).
+- The MIDI side is ours: velocity per note (`TranscribedNote.velocity`, 100 for
+  MuScriptor), sustain as controller 64 (`swift-midi-file` 0.4.0 added control
+  changes), same tempo grid handling via `TempoResolver` (shared with the
+  MuScriptor path). Upstream's own writer is 120 BPM / 384 tpq; not copied.
+- Fixture names cannot contain dots before the extension (`Fixture.url` splits
+  on the first dot): `frame_trunk_0.f32`, not `frame_model.trunk_0.f32`.
 
 ## Fixtures and parity
 `Tools/dump_fixtures.py` regenerates `Tests/.../Fixtures` from a muscriptor

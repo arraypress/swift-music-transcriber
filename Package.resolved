@@ -1,13 +1,13 @@
 {
-  "originHash" : "f763be67d7d281c1b95dd7bcb93e56dbccdf3847fd9dd8b6c6f621457ab47a11",
+  "originHash" : "9dd545cc484b2ff3c1322d0380e8535b336fe0e037c98162167d3c85d610ae3d",
   "pins" : [
     {
       "identity" : "swift-midi-file",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/arraypress/swift-midi-file.git",
       "state" : {
-        "revision" : "71f1a19adc117987310c7463fe650d8b6c776dfa",
-        "version" : "0.3.0"
+        "revision" : "fd67bce1a1da1c898df1ce0a37755c55d97e8497",
+        "version" : "0.4.0"
       }
     },
     {
