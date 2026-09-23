@@ -24,3 +24,21 @@ public enum TempoDetection: String, Codable, Sendable, CaseIterable {
     /// Do not run the beat tracker at all.
     case off
 }
+
+/// Which beat tracker finds the grid.
+///
+/// Upstream uses Beat This! (CPJKU); this library ships it as a Core AI asset
+/// and uses it whenever it is installed, because the grid then matches
+/// upstream's. Apple's MusicUnderstanding needs no asset and remains the
+/// fallback; measured on the demo it heard the half-time pulse (77.5 for 155).
+public enum BeatTracker: String, Codable, Sendable, CaseIterable {
+
+    /// Beat This! when installed, otherwise Apple's.
+    case automatic
+
+    /// Beat This!; an error when it is not installed.
+    case beatThis = "beat-this"
+
+    /// Apple's MusicUnderstanding.
+    case apple
+}

@@ -33,6 +33,11 @@ public final class MusicTranscriber: @unchecked Sendable {
     /// tokens the model generated for it. Nil in normal use.
     public var tokenObserver: (@Sendable (_ chunk: Int, _ prompt: [Int], _ tokens: [Int]) -> Void)?
 
+    /// The Beat This! tracker, loaded once per instance on first use. Loading
+    /// it per file cost a second a loop across a folder.
+    private var beatTracker: BeatThisTracker?
+    private var beatTrackerMissing = false
+
     /// Load a model asset. See ``ModelLocator``.
     public init(model url: URL) async throws {
         decoder = try await CoreAIDecoder(contentsOf: url)
@@ -52,10 +57,11 @@ public final class MusicTranscriber: @unchecked Sendable {
     ///     snapped in by the smallest musical ratio (2, 1/2, 3/2, 2/3 …), which is
     ///     how a half-time hearing of a 178 BPM track becomes 178. See
     ///     ``BeatGrid/snapped(into:)``.
+    ///   - tracker: which beat tracker finds the grid; see ``BeatTracker``.
     ///   - progress: called with the fraction of chunks done, on the caller's task.
     public func transcribe(_ url: URL, options: TranscriptionOptions = .init(),
                            tempo: TempoDetection = .bestEffort, fixedTempo: Double? = nil,
-                           tempoRange: ClosedRange<Double>? = nil,
+                           tempoRange: ClosedRange<Double>? = nil, tracker: BeatTracker = .automatic,
                            progress: ((Double) -> Void)? = nil) async throws -> Transcription {
         try options.validate()
         let samples = try AudioLoader.load(url)
@@ -68,7 +74,7 @@ public final class MusicTranscriber: @unchecked Sendable {
             grid = .fixed(bpm: fixedTempo, duration: audioDuration)
         } else if tempo != .off {
             do {
-                grid = try await Self.detectGrid(url: url, duration: audioDuration)
+                grid = try await detectGrid(url: url, samples: samples, duration: audioDuration, tracker: tracker)
             } catch let error as MusicTranscriberError {
                 if tempo == .required { throw error }
                 warnings.append("\(error.localizedDescription); falling back to the placeholder tempo")
@@ -195,11 +201,37 @@ public final class MusicTranscriber: @unchecked Sendable {
 
     // MARK: - Tempo
 
-    /// Detect the beat grid with MusicUnderstanding and upstream's fitting rules.
-    public static func detectGrid(url: URL, duration: Double) async throws -> BeatGrid {
+    /// Detect the beat grid — Beat This! when installed or asked for, else
+    /// MusicUnderstanding — and fit it with upstream's rules.
+    public func detectGrid(url: URL, samples: [Float], duration: Double,
+                           tracker: BeatTracker = .automatic) async throws -> BeatGrid {
         guard duration >= 1 else {
             throw MusicTranscriberError.noSteadyTempo(String(format: "Audio is %.2fs long, too short to detect a tempo", duration))
         }
+        if tracker != .apple, let beatThis = try await loadBeatTracker(required: tracker == .beatThis) {
+            let (beats, downbeats) = try await beatThis.track(samples16k: samples)
+            return try BeatGridMath.grid(beats: beats, downbeats: downbeats)
+        }
+        return try await Self.detectGrid(url: url, duration: duration)
+    }
+
+    /// The cached tracker, loading it on first use; nil when it is not installed
+    /// and not required.
+    private func loadBeatTracker(required: Bool) async throws -> BeatThisTracker? {
+        if let beatTracker { return beatTracker }
+        if beatTrackerMissing && !required { return nil }
+        do {
+            let tracker = try await BeatThisTracker(contentsOf: try ModelLocator.resolveBeatTracker())
+            beatTracker = tracker
+            return tracker
+        } catch MusicTranscriberError.modelNotFound where !required {
+            beatTrackerMissing = true
+            return nil
+        }
+    }
+
+    /// Detect the beat grid with MusicUnderstanding and upstream's fitting rules.
+    public static func detectGrid(url: URL, duration: Double) async throws -> BeatGrid {
         let analysis: AudioAnalysis
         do {
             analysis = try await MusicAnalysis.analyze(url: url, only: [.rhythm])

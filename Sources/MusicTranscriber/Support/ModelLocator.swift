@@ -72,6 +72,24 @@ public enum ModelLocator {
         throw MusicTranscriberError.modelNotFound("no \(variant.rawValue) model (looked at \(looked.joined(separator: ", ")))")
     }
 
+    /// Resolve the Beat This! tracker asset: an explicit path, `$SCRIBE_BEAT_THIS`,
+    /// then ``installDirectory``. Throws when none is installed; callers fall
+    /// back to Apple's tracker and say so.
+    public static func resolveBeatTracker(explicit: String? = nil,
+                                          environment: [String: String] = ProcessInfo.processInfo.environment) throws -> URL {
+        var looked: [String] = []
+        var candidates: [URL] = []
+        if let explicit, !explicit.isEmpty { candidates.append(URL(fileURLWithPath: (explicit as NSString).expandingTildeInPath)) }
+        if let env = environment["SCRIBE_BEAT_THIS"], !env.isEmpty { candidates.append(URL(fileURLWithPath: (env as NSString).expandingTildeInPath)) }
+        candidates.append(installDirectory.appendingPathComponent(BeatThisTracker.assetName))
+        for candidate in candidates {
+            let url = candidate.pathExtension == "aimodel" ? candidate : candidate.appendingPathComponent(BeatThisTracker.assetName)
+            looked.append(url.path)
+            if FileManager.default.fileExists(atPath: url.path) { return url }
+        }
+        throw MusicTranscriberError.modelNotFound("no beat tracker (looked at \(looked.joined(separator: ", ")))")
+    }
+
     /// The assets installed in ``installDirectory``, with their sizes in bytes.
     public static func installed(in directory: URL = installDirectory) -> [(url: URL, bytes: Int64)] {
         guard let items = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else {
