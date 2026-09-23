@@ -207,7 +207,18 @@ octave F1 0.54 → 0.56. `drop` reproduces upstream's stream exactly.
 ## The model is not bundled
 
 The weights are **CC BY-NC 4.0** (non-commercial) and gated on Hugging Face; the code is MIT.
-Convert once:
+The conversions described above are published, under the same licence and gate, at
+[huggingface.co/arraypress/scribe-muscriptor](https://huggingface.co/arraypress/scribe-muscriptor)
+(all three sizes, plus large fp16) and the tracker at
+[huggingface.co/arraypress/scribe-beat-this](https://huggingface.co/arraypress/scribe-beat-this) (MIT):
+
+```sh
+# accept the licence on the repo page, then
+hf download arraypress/scribe-muscriptor --include "scribe-medium-float32.aimodel/*" --local-dir models
+hf download arraypress/scribe-beat-this --local-dir models
+```
+
+Or convert yourself, which is what produced those files:
 
 ```sh
 # accept the licence at https://huggingface.co/MuScriptor, then
