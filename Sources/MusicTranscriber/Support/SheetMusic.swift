@@ -281,20 +281,18 @@ public enum SheetMusic {
         let out = Pipe(), err = Pipe()
         process.standardOutput = out
         process.standardError = err
-        try process.run()
-        let deadline = DispatchTime.now() + timeout
+        let outText = PipeCollector(out), errText = PipeCollector(err)
         let group = DispatchGroup()
         group.enter()
         process.terminationHandler = { _ in group.leave() }
-        let outData = out.fileHandleForReading.readDataToEndOfFile()
-        let errData = err.fileHandleForReading.readDataToEndOfFile()
-        if group.wait(timeout: deadline) == .timedOut {
+        try process.run()
+        if group.wait(timeout: .now() + timeout) == .timedOut {
             process.terminate()
             return Completed(status: 1, stdout: "", stderr: "timed out after \(Int(timeout))s")
         }
         return Completed(status: process.terminationStatus,
-                         stdout: String(decoding: outData, as: UTF8.self),
-                         stderr: String(decoding: errData, as: UTF8.self))
+                         stdout: String(decoding: outText.collected(), as: UTF8.self),
+                         stderr: String(decoding: errText.collected(), as: UTF8.self))
     }
 
     static func ensure(_ file: URL, _ what: String, _ result: Completed) throws {
